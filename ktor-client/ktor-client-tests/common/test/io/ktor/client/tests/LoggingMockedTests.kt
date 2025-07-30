@@ -6,6 +6,7 @@ package io.ktor.client.tests
 
 import io.ktor.client.call.*
 import io.ktor.client.engine.mock.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -29,7 +31,7 @@ class LoggingMockedTests {
     fun testLogResponseWithException() = testWithEngine(MockEngine, retries = 5) {
         val testLogger = TestLogger(
             "REQUEST: ${URLBuilder.origin}",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "COMMON HEADERS",
             "-> Accept: */*",
             "-> Accept-Charset: UTF-8",
@@ -40,7 +42,7 @@ class LoggingMockedTests {
             "",
             "BODY END",
             "RESPONSE: 200 OK",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "FROM: ${URLBuilder.origin}",
             "COMMON HEADERS",
             "+++RESPONSE ${URLBuilder.origin} failed with exception: CustomError[PARSE ERROR]",
@@ -94,7 +96,7 @@ class LoggingMockedTests {
     fun testLogResponseWithExceptionSingle() = testWithEngine(MockEngine) {
         val testLogger = TestLogger(
             "REQUEST: ${URLBuilder.origin}",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "COMMON HEADERS",
             "-> Accept: */*",
             "-> Accept-Charset: UTF-8",
@@ -105,7 +107,7 @@ class LoggingMockedTests {
             "",
             "BODY END",
             "RESPONSE: 200 OK",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "FROM: ${URLBuilder.origin}",
             "COMMON HEADERS",
             "RESPONSE ${URLBuilder.origin} failed with exception: CustomError[PARSE ERROR]",
@@ -150,7 +152,7 @@ class LoggingMockedTests {
     fun testLoggingWithForm() = testWithEngine(MockEngine) {
         val testLogger = TestLogger(
             "REQUEST: http://localhost/",
-            "METHOD: HttpMethod(value=POST)",
+            "METHOD: POST",
             "COMMON HEADERS",
             "-> Accept: */*",
             "-> Accept-Charset: UTF-8",
@@ -168,7 +170,7 @@ class LoggingMockedTests {
             "",
             "BODY END",
             "RESPONSE: 200 OK",
-            "METHOD: HttpMethod(value=POST)",
+            "METHOD: POST",
             "FROM: http://localhost/",
             "COMMON HEADERS",
             "BODY Content-Type: null",
@@ -219,7 +221,7 @@ class LoggingMockedTests {
     fun testFilterRequest() = testWithEngine(MockEngine) {
         val testLogger = TestLogger(
             "REQUEST: http://somewhere/filtered_path",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "COMMON HEADERS",
             "-> Accept: */*",
             "-> Accept-Charset: UTF-8",
@@ -230,7 +232,7 @@ class LoggingMockedTests {
             "",
             "BODY END",
             "RESPONSE: 200 OK",
-            "METHOD: HttpMethod(value=GET)",
+            "METHOD: GET",
             "FROM: http://somewhere/filtered_path",
             "COMMON HEADERS",
             "BODY Content-Type: null",
@@ -264,7 +266,7 @@ class LoggingMockedTests {
     fun testSanitizeHeaders() = testWithEngine(MockEngine) {
         val testLogger = TestLogger {
             line("REQUEST: http://localhost/")
-            line("METHOD: HttpMethod(value=GET)")
+            line("METHOD: GET")
             line("COMMON HEADERS")
             line("-> Accept: */*")
             line("-> Accept-Charset: UTF-8")
@@ -273,7 +275,7 @@ class LoggingMockedTests {
             line("CONTENT HEADERS")
             line("-> Content-Length: 0")
             line("RESPONSE: 200 OK")
-            line("METHOD: HttpMethod(value=GET)")
+            line("METHOD: GET")
             line("FROM: http://localhost/")
             line("COMMON HEADERS")
             line("-> Sanitized: ***")
@@ -341,6 +343,34 @@ class LoggingMockedTests {
                     channel.close()
                 }
             }
+        }
+    }
+
+    // Issue: KTOR-6474
+    @Test
+    fun testLoggingWithResponseValidator() = testWithEngine(MockEngine) {
+        val responseBody = "Hello, world!"
+
+        config {
+            install(Logging) {
+                level = LogLevel.ALL
+            }
+
+            HttpResponseValidator {
+                validateResponse {
+                    assertEquals(responseBody, it.bodyAsText())
+                }
+            }
+
+            engine {
+                addHandler {
+                    respondOk(responseBody)
+                }
+            }
+        }
+
+        test { client ->
+            assertEquals(responseBody, client.get("").bodyAsText())
         }
     }
 }
